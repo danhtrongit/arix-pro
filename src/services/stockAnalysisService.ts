@@ -1,6 +1,7 @@
 import { SimplizeService, SimplizeReport } from './simplizeService';
 import { PDFService } from './pdfService';
 import { OpenAIService } from './openaiService';
+import { PriceDataService } from './priceDataService';
 import { STOCK_ANALYSIS_SYSTEM_PROMPT, buildAnalysisUserPrompt } from '../prompts/stockAnalysisPrompt';
 import { CONFIG } from '../config/constants';
 
@@ -93,6 +94,17 @@ export class StockAnalysisService {
       console.log(`Step 1: Fetching 5 latest reports (within ${CONFIG.MAX_REPORT_AGE_DAYS} days)...`);
       const reports = await SimplizeService.getValidReports(ticker, 5, CONFIG.MAX_REPORT_AGE_DAYS);
       console.log(`✓ Found ${reports.length} valid reports`);
+
+      // Lấy dữ liệu giá từ IQX
+      console.log(`Step 1.5: Fetching price data from IQX...`);
+      let priceDataText = '';
+      try {
+        priceDataText = await PriceDataService.getPriceDataForAnalysis([ticker]);
+        console.log(`✓ Price data fetched successfully`);
+      } catch (error: any) {
+        console.log(`⚠️ Could not fetch price data: ${error.message}`);
+        priceDataText = `⚠️ Dữ liệu giá không khả dụng\n\n`;
+      }
 
       // Tải và đọc tất cả PDF
       console.log(`Step 2: Downloading and extracting ${reports.length} PDFs...`);
