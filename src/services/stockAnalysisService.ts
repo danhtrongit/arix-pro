@@ -116,18 +116,25 @@ export class StockAnalysisService {
       console.log(`Step 3: Building comprehensive analysis context...`);
       const systemPrompt = `Bạn là chuyên gia phân tích chứng khoán Việt Nam. 
 Bạn vừa đọc ${reports.length} báo cáo phân tích gần nhất (trong vòng 60 ngày) về mã ${ticker}.
-Hãy trả lời câu hỏi dựa trên tổng hợp các báo cáo này.
+Bạn cũng có dữ liệu giá giao dịch gần đây của cổ phiếu này.
+Hãy trả lời câu hỏi dựa trên tổng hợp các báo cáo và dữ liệu giá.
 
 YÊU CẦU QUAN TRỌNG:
-- CHỈ nêu những gì có trong báo cáo, không bịa đặt
+- CHỈ nêu những gì có trong báo cáo và dữ liệu giá, không bịa đặt
 - Tập trung vào: Kết quả KD, triển vọng, định giá, khuyến nghị
+- Phân tích xu hướng giá gần đây và so sánh với khuyến nghị trong báo cáo
 - So sánh quan điểm các báo cáo (nếu khác nhau)
 - Độ dài: 500-700 từ (ngắn gọn, súc tích)
 - Sử dụng Markdown, emoji để dễ đọc
 
 Lưu ý: Tất cả thông tin xem như từ IQX tổng hợp, không nhắc nguồn cụ thể.`;
 
-      let context = `# TỔNG HỢP ${reports.length} BÁO CÁO PHÂN TÍCH GẦN NHẤT VỀ ${ticker}\n\n`;
+      let context = '';
+      
+      // Thêm dữ liệu giá vào đầu context
+      context += priceDataText;
+      
+      context += `# TỔNG HỢP ${reports.length} BÁO CÁO PHÂN TÍCH GẦN NHẤT VỀ ${ticker}\n\n`;
       
       // Tổng hợp thông tin tổng quan
       context += `## 📊 Thông tin tổng quan\n`;

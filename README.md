@@ -6,7 +6,9 @@ API phân tích cổ phiếu thông minh sử dụng AI để tự động phân
 
 - **Smart Chat**: Trò chuyện thông minh với khả năng tự động phát hiện yêu cầu phân tích cổ phiếu
 - **Tự động phân tích cổ phiếu**: Tự động tải và phân tích báo cáo PDF từ Simplize
-- **AI-Powered**: Sử dụng GPT-5 để phân tích và tổng hợp thông tin
+- **Dữ liệu giá thời gian thực**: Lấy dữ liệu OHLC (Open-High-Low-Close) từ IQX API
+- **Phân tích kỹ thuật**: Phân tích xu hướng giá, volume, và biên độ dao động
+- **AI-Powered**: Sử dụng GPT-5 để phân tích và tổng hợp thông tin từ báo cáo + dữ liệu giá
 - **Lọc báo cáo thông minh**: Chỉ phân tích báo cáo mới nhất (trong vòng 60 ngày)
 
 ## 📋 Yêu cầu
@@ -52,7 +54,7 @@ pnpm build
 pnpm start
 ```
 
-Server sẽ chạy tại: `http://localhost:3000`
+Server sẽ chạy tại: `http://localhost:5999`
 
 ## 📡 API Endpoints
 
@@ -64,6 +66,11 @@ Kiểm tra trạng thái server.
 **Response:**
 ```
 hello
+```
+
+**Example:**
+```bash
+curl http://localhost:5999/api
 ```
 
 ---
@@ -146,7 +153,7 @@ Trò chuyện thông minh với khả năng tự động phát hiện và phân 
 
 **Phân tích cổ phiếu:**
 ```bash
-curl -X POST http://localhost:3000/api/chat \
+curl -X POST http://localhost:5999/api/chat \
   -H "Content-Type: application/json" \
   -d '{
     "message": "Phân tích cổ phiếu VIC"
@@ -155,7 +162,7 @@ curl -X POST http://localhost:3000/api/chat \
 
 **Chat thông thường:**
 ```bash
-curl -X POST http://localhost:3000/api/chat \
+curl -X POST http://localhost:5999/api/chat \
   -H "Content-Type: application/json" \
   -d '{
     "message": "Thị trường chứng khoán Việt Nam hiện tại như thế nào?"
@@ -166,7 +173,7 @@ curl -X POST http://localhost:3000/api/chat \
 
 ```javascript
 // Phân tích cổ phiếu
-const response = await fetch('http://localhost:3000/api/chat', {
+const response = await fetch('http://localhost:5999/api/chat', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
@@ -186,7 +193,7 @@ console.log(data);
 ```python
 import requests
 
-url = "http://localhost:3000/api/chat"
+url = "http://localhost:5999/api/chat"
 payload = {
     "message": "Phân tích cổ phiếu VCB",
     "model": "gpt-5-chat-latest"
@@ -211,6 +218,7 @@ AriX/
 │   ├── services/
 │   │   ├── openaiService.ts        # OpenAI API integration
 │   │   ├── pdfService.ts           # PDF parsing service
+│   │   ├── priceDataService.ts     # Price data from IQX API
 │   │   ├── queryAnalysisService.ts # Query intent analysis
 │   │   ├── simplizeService.ts      # Simplize API integration
 │   │   └── stockAnalysisService.ts # Stock analysis logic
@@ -230,11 +238,13 @@ Các thông số có thể cấu hình trong `src/config/constants.ts`:
 
 ```typescript
 export const CONFIG = {
-  PORT: 3000,                        // Cổng server
+  PORT: 5999,                        // Cổng server
   OPENAI_API_KEY: '',                // OpenAI API key
   OPENAI_API_URL: '',                // OpenAI API URL
   DEFAULT_MODEL: 'gpt-5-chat-latest', // Model mặc định
   MINI_MODEL: 'gpt-5-mini-2025-08-07', // Model cho phân tích query
+  SIMPLIZE_API_URL: '',              // Simplize API URL
+  PRICE_DATA_API_URL: '',            // IQX Price Data API URL
   MAX_REPORTS_TO_ANALYZE: 5,         // Số báo cáo tối đa phân tích
   MAX_REPORT_AGE_DAYS: 60,           // Tuổi báo cáo tối đa (ngày)
   PDF_TIMEOUT: 30000,                // Timeout tải PDF (ms)
@@ -253,8 +263,10 @@ export const CONFIG = {
 2. **Stock Analysis**:
    - Lấy danh sách báo cáo từ Simplize API
    - Lọc báo cáo mới nhất (60 ngày gần đây)
+   - Lấy dữ liệu giá OHLC từ IQX API (60 ngày giao dịch gần nhất)
    - Tải và parse PDF báo cáo
-   - Sử dụng GPT-5 để phân tích và tổng hợp
+   - Phân tích xu hướng giá, volume, và biên độ dao động
+   - Sử dụng GPT-5 để phân tích và tổng hợp dữ liệu từ báo cáo + dữ liệu giá
 
 3. **Fallback**:
    - Nếu không phải phân tích cổ phiếu, xử lý như chat thông thường
