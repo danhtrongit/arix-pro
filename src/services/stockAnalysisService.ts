@@ -2,6 +2,7 @@ import { SimplizeService, SimplizeReport } from './simplizeService';
 import { PDFService } from './pdfService';
 import { OpenAIService } from './openaiService';
 import { PriceDataService } from './priceDataService';
+import { FinancialRAGService } from './financialRAGService';
 import { STOCK_ANALYSIS_SYSTEM_PROMPT, buildAnalysisUserPrompt } from '../prompts/stockAnalysisPrompt';
 import { CONFIG } from '../config/constants';
 
@@ -52,7 +53,7 @@ export class StockAnalysisService {
           },
           {
             role: 'user',
-            content: userPrompt + '\n\nLƯU Ý QUAN TRỌNG:\n- CHỈ phân tích những gì có trong báo cáo\n- KHÔNG bịa đặt thông tin\n- Độ dài: 500-700 từ\n- Tập trung vào các ý CHÍNH'
+            content: userPrompt + '\n\nLƯU Ý QUAN TRỌNG:\n- Phân tích dựa trên dữ liệu thực tế\n- KHÔNG bịa đặt thông tin\n- KHÔNG nhắc đến nguồn hoặc số lượng tài liệu\n- Độ dài: 500-700 từ\n- Tập trung vào các ý chính'
           }
         ],
         model,
@@ -112,60 +113,83 @@ export class StockAnalysisService {
       const pdfContents = await PDFService.extractMultiplePdfs(pdfUrls);
       console.log(`✓ Extracted ${pdfContents.length} PDFs`);
 
-      // Tạo context tổng hợp CHI TIẾT từ 5 báo cáo
+      // Tạo context tổng hợp CHI TIẾT
       console.log(`Step 3: Building comprehensive analysis context...`);
-      const systemPrompt = `Bạn là chuyên gia phân tích chứng khoán Việt Nam. 
-Bạn vừa đọc ${reports.length} báo cáo phân tích gần nhất (trong vòng 60 ngày) về mã ${ticker}.
-Bạn cũng có dữ liệu giá giao dịch gần đây của cổ phiếu này.
-Hãy trả lời câu hỏi dựa trên tổng hợp các báo cáo và dữ liệu giá.
+      
+      // Query financial data from RAG (nếu có)
+      const ragService = new FinancialRAGService();
+      const ragResult = await ragService.queryFinancials(ticker, userQuestion);
+      
+      const systemPrompt = `Bạn là Arix Pro - Phiên bản AI Pro phân tích chứng khoán của IQX. 
+Bạn có đầy đủ thông tin phân tích về mã ${ticker}, bao gồm dữ liệu giá giao dịch gần đây.
+Hãy trả lời câu hỏi một cách tự nhiên và chuyên nghiệp.
+
+⚠️ LƯU Ý VỀ NĂM HIỆN TẠI: ${CONFIG.CURRENT_YEAR} (Quý ${CONFIG.CURRENT_QUARTER})
 
 YÊU CẦU QUAN TRỌNG:
-- CHỈ nêu những gì có trong báo cáo và dữ liệu giá, không bịa đặt
-- Tập trung vào: Kết quả KD, triển vọng, định giá, khuyến nghị
-- Phân tích xu hướng giá gần đây và so sánh với khuyến nghị trong báo cáo
-- So sánh quan điểm các báo cáo (nếu khác nhau)
+- **BẮT BUỘC** phân tích dựa vào dữ liệu từ các file PDF (phân tích từ các công ty chứng khoán)
+- Dữ liệu báo cáo tài chính CHỈ để tham khảo thêm, KHÔNG phải nguồn chính
+- Luôn sử dụng dữ liệu MỚI NHẤT có trong phân tích (năm ${CONFIG.CURRENT_YEAR})
+- Tập trung vào: Kết quả kinh doanh, triển vọng, định giá, khuyến nghị
+- Phân tích xu hướng giá gần đây
+- So sánh các quan điểm khác nhau (nếu có)
 - Độ dài: 500-700 từ (ngắn gọn, súc tích)
-- Sử dụng Markdown, emoji để dễ đọc
+- Sử dụng markdown, emoji để dễ đọc
+- KHÔNG nhắc đến số lượng dữ liệu, nguồn, hoặc tài liệu tham khảo
 
-Lưu ý: Tất cả thông tin xem như từ IQX tổng hợp, không nhắc nguồn cụ thể.`;
+Trình bày tự nhiên như một chuyên gia chia sẻ quan điểm.`;
 
       let context = '';
       
       // Thêm dữ liệu giá vào đầu context
       context += priceDataText;
       
-      context += `# TỔNG HỢP ${reports.length} BÁO CÁO PHÂN TÍCH GẦN NHẤT VỀ ${ticker}\n\n`;
+      context += `# Phân tích cổ phiếu ${ticker} (${CONFIG.CURRENT_YEAR})\n\n`;
+      
+      context += `## 🎯 NGUỒN DỮ LIỆU CHÍNH: Phân tích từ các công ty chứng khoán (PDF)\n\n`;
       
       // Tổng hợp thông tin tổng quan
-      context += `## 📊 Thông tin tổng quan\n`;
-      context += `- Tổng số báo cáo phân tích: ${reports.length}\n`;
+      context += `## 📊 Tổng quan đánh giá\n`;
       const buyCount = reports.filter(r => r.recommend.includes('MUA')).length;
       const holdCount = reports.filter(r => r.recommend.includes('GIỮ') || r.recommend.includes('LẬP')).length;
       const sellCount = reports.filter(r => r.recommend.includes('BÁN')).length;
-      context += `- Khuyến nghị: MUA (${buyCount}), NẮM GIỮ (${holdCount}), BÁN (${sellCount})\n`;
+      context += `- Các đánh giá: Mua (${buyCount}), Nắm giữ (${holdCount}), Bán (${sellCount})\n`;
       
       const avgPrice = reports
         .filter(r => r.targetPrice)
         .reduce((sum, r) => sum + (r.targetPrice || 0), 0) / 
         reports.filter(r => r.targetPrice).length;
       if (avgPrice) {
-        context += `- Giá mục tiêu trung bình: ${Math.round(avgPrice).toLocaleString()} VNĐ\n`;
+        context += `- Giá mục tiêu ước tính: ${Math.round(avgPrice).toLocaleString()} VNĐ\n`;
       }
       context += `\n${'='.repeat(80)}\n\n`;
       
-      // Chi tiết từng báo cáo với nhiều nội dung hơn
+      // Chi tiết từng phân tích (NGUỒN CHÍNH)
       reports.forEach((report, index) => {
-        context += `## 📄 Báo cáo ${index + 1}\n`;
+        context += `## 📄 Phân tích ${index + 1} [NGUỒN CHÍNH]\n`;
         context += `- **Tiêu đề:** ${report.title}\n`;
-        context += `- **Ngày phát hành:** ${report.issueDate}\n`;
-        context += `- **Khuyến nghị:** ${report.recommend}\n`;
+        context += `- **Ngày:** ${report.issueDate}\n`;
+        context += `- **Đánh giá:** ${report.recommend}\n`;
         context += `- **Giá mục tiêu:** ${report.targetPrice ? report.targetPrice.toLocaleString() + ' VNĐ' : 'N/A'}\n\n`;
-        context += `### Nội dung chi tiết:\n${pdfContents[index].substring(0, 8000)}\n\n`;
+        context += `### Nội dung:\n${pdfContents[index].substring(0, 8000)}\n\n`;
         context += `${'='.repeat(80)}\n\n`;
       });
 
-      context += `\n**Câu hỏi của người dùng:** ${userQuestion}\n\n`;
-      context += `**YÊU CẦU:** CHỈ phân tích những gì có trong báo cáo. Không bịa thêm. Độ dài: 500-700 từ.`;
+      // Thêm dữ liệu tài chính từ RAG (nếu có) - CHỈ THAM KHẢO
+      if (ragResult.success && ragResult.context) {
+        context += `\n## 📑 Dữ liệu báo cáo tài chính [CHỈ THAM KHẢO]\n\n`;
+        context += ragResult.context;
+        context += `\n\n${'='.repeat(80)}\n\n`;
+        console.log(`✅ Added financial data: ${ragResult.dataPoints} points`);
+      }
+
+      context += `\n**Câu hỏi:** ${userQuestion}\n\n`;
+      context += `**LƯU Ý QUAN TRỌNG:**\n`;
+      context += `- Phân tích BẮT BUỘC dựa vào nội dung PDF từ các công ty chứng khoán\n`;
+      context += `- Báo cáo tài chính CHỈ để tham khảo thêm\n`;
+      context += `- Luôn ưu tiên dữ liệu MỚI NHẤT (năm ${CONFIG.CURRENT_YEAR})\n`;
+      context += `- Độ dài: 500-700 từ\n`;
+      context += `- Không bịa đặt, không nhắc nguồn`;
 
       console.log(`✓ Context length: ${context.length} characters`);
 

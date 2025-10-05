@@ -78,8 +78,6 @@ export class ChatController {
             type: 'stock_analysis',
             ticker: queryAnalysis.ticker,
             message: result.analysis,
-            reports: result.reports,
-            totalReportsAnalyzed: result.totalReports,
             queryAnalysis: {
               intent: queryAnalysis.intent,
               confidence: queryAnalysis.confidence
